@@ -62,10 +62,18 @@ export function applyZoomLevel(webContents, level) {
 // and Windows provide trailing `resized`/`moved` events; Linux only provides the
 // noisy `resize`/`move` pair, so debounce those fallbacks before re-applying the
 // persisted level.
+//
+// `focus`/`blur` are wired too: on Windows, losing focus (Alt+Tab) makes
+// Chromium re-impose the per-origin HostZoomMap on the webContents, silently
+// overriding the app-persisted zoom level and leaving the UI Scale control out
+// of sync until the next reassert. Re-applying the persisted level on blur (and
+// again on focus) keeps the window's zoom pinned to the user's choice.
 export const ZOOM_RESIZE_REASSERT_DELAY_MS = 100
 
 export function zoomReassertWindowEvents(platform = process.platform) {
-  return platform === 'linux' ? ['show', 'restore', 'resize', 'move'] : ['show', 'restore', 'resized', 'moved']
+  return platform === 'linux'
+    ? ['show', 'restore', 'resize', 'move', 'focus', 'blur']
+    : ['show', 'restore', 'resized', 'moved', 'focus', 'blur']
 }
 
 export function installZoomReassertOnWindowEvents(win, reassert, platform = process.platform) {
