@@ -28,6 +28,7 @@ import { computed } from 'nanostores'
 import { stableRecord } from '@/lib/stable-array'
 
 import { $backgroundRunningSessionIds } from './composer-status'
+import { $foreignLiveSessionIds } from './foreign-live'
 import { $sessions, $unreadFinishedSessionIds, lineageAliases } from './session'
 import { $attentionSessionIds, $draftSessionIds, $stalledSessionIds, $workingSessionIds } from './session-states'
 import { $unreadWriteGuard, UNREAD_WRITE_GUARD_MS } from './session-unread'
@@ -73,9 +74,10 @@ export const $sessionDotStateById = computed(
     $unreadFinishedSessionIds,
     $draftSessionIds,
     $sessions,
+    $foreignLiveSessionIds,
     $unreadWriteGuard
   ],
-  (attention, working, stalled, background, unread, draft, sessions, unreadWriteGuard) => {
+  (attention, working, stalled, background, unread, draft, sessions, foreign, unreadWriteGuard) => {
     const next: Record<string, SessionDotState> = {}
 
     const claim = (ids: readonly string[], state: SessionDotState) => {
@@ -117,6 +119,13 @@ export const $sessionDotStateById = computed(
     claim(persistedUnread, 'unread')
 
     claim(background, 'background')
+
+    // DB-derived liveness: sessions with no runtime in this renderer but a
+    // fresh backend `is_active` row (cli one-shots, cron runs, other
+    // profiles, TUI). Weaker than event-derived working by construction —
+    // the predicate only claims ids with no $sessionStates runtime.
+    claim(foreign, 'working')
+
     claim(working, 'working')
 
     // Stalled REFINES working rather than rivalling it — the turn is still
