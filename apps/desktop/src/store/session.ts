@@ -8,6 +8,8 @@ import type { ChatMessage } from '@/lib/chat-messages'
 import { persistBoolean, persistString, storedBoolean, storedString } from '@/lib/storage'
 import type { SessionInfo, UsageStats } from '@/types/hermes'
 
+import { clearUnreadOnOpen } from './session-unread'
+
 type Updater<T> = T | ((current: T) => T)
 export type ComposerModelSource = '' | 'default' | 'manual'
 
@@ -655,6 +657,11 @@ export const setSelectedStoredSessionId = (next: Updater<string | null>) => {
 
   if (id && $unreadFinishedSessionIds.get().includes(id)) {
     $unreadFinishedSessionIds.set($unreadFinishedSessionIds.get().filter(x => x !== id))
+  }
+
+  // ...and the persisted watermark flag, when the row carried one.
+  if (id) {
+    void clearUnreadOnOpen(id)
   }
 }
 
