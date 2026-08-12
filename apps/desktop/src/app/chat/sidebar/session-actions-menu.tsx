@@ -260,7 +260,9 @@ function useSessionActions({
     }),
     spec({
       disabled: !onToggleUnread,
-      icon: unread ? 'mail-read' : 'mail-unread',
+      // Closed envelope = unread, open envelope = read (codicon has mail and
+      // mail-read, but no mail-unread glyph — verified against the font css).
+      icon: unread ? 'mail-read' : 'mail',
       label: unread ? r.markRead : r.markUnread,
       onSelect: () => {
         triggerHaptic('selection')
