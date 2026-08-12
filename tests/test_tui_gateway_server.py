@@ -3480,7 +3480,7 @@ def test_apply_model_switch_persist_override_false_never_persists(monkeypatch):
     )
     session = {"agent": None}
 
-    out = server._apply_model_switch(
+    out = server._apply_model_switch_unlocked(
         "sid", session, "new/model --provider nous", persist_override=False
     )
 
@@ -6122,6 +6122,208 @@ def test_config_set_fast_status_is_non_mutating(monkeypatch):
         assert emits == []
     finally:
         server._sessions.pop("sid", None)
+
+
+def test_config_set_rejects_explicit_missing_session(monkeypatch):
+    server._sessions.pop("vanished-session", None)
+    apply_calls = []
+    monkeypatch.setattr(
+        server,
+        "_apply_model_switch",
+        lambda *args, **kwargs: apply_calls.append((args, kwargs))
+        or {
+            "value": "gpt-5.6-sol",
+            "warning": "",
+            "confirm_required": False,
+            "scope": "session",
+        },
+    )
+
+    resp = server.handle_request(
+        {
+            "id": "missing-session-switch",
+            "method": "config.set",
+            "params": {
+                "session_id": "vanished-session",
+                "key": "model",
+                "value": "gpt-5.6-sol --provider openai-codex --session",
+            },
+        }
+    )
+
+    assert resp is not None
+    assert resp["error"]["code"] == 4001
+    assert resp["error"]["message"] == "session not found"
+    assert apply_calls == []
+
+
+def test_config_set_rejects_session_removed_after_initial_lookup(monkeypatch):
+    from hermes_cli import model_switch as model_switch_mod
+
+    sid = "vanished-during-switch"
+    session = _session(agent=types.SimpleNamespace())
+    server._sessions[sid] = session
+    parse_entered = threading.Event()
+    close_done = threading.Event()
+    inner_calls = []
+    original_parse = model_switch_mod.parse_model_switch_args
+
+    def delayed_parse(raw):
+        parse_entered.set()
+        assert close_done.wait(5)
+        return original_parse(raw)
+
+    def fake_apply(*args, **kwargs):
+        inner_calls.append((args, kwargs))
+        return {
+            "value": "gpt-5.6-sol",
+            "warning": "",
+            "confirm_required": False,
+            "scope": "session",
+        }
+
+    monkeypatch.setattr(model_switch_mod, "parse_model_switch_args", delayed_parse)
+    if hasattr(server, "_apply_model_switch_unlocked"):
+        monkeypatch.setattr(server, "_apply_model_switch_unlocked", fake_apply)
+    else:
+        monkeypatch.setattr(server, "_apply_model_switch", fake_apply)
+
+    def remove_session():
+        assert parse_entered.wait(5)
+        assert server._pop_session_by_id(sid) is session
+        close_done.set()
+
+    closer = threading.Thread(target=remove_session)
+    closer.start()
+    try:
+        resp = server.handle_request(
+            {
+                "id": "raced-session-switch",
+                "method": "config.set",
+                "params": {
+                    "session_id": sid,
+                    "key": "model",
+                    "value": "gpt-5.6-sol --provider openai-codex --session",
+                },
+            }
+        )
+        closer.join(5)
+
+        assert resp is not None
+        assert resp["error"]["code"] == 4001
+        assert resp["error"]["message"] == "session not found"
+        assert inner_calls == []
+    finally:
+        close_done.set()
+        closer.join(5)
+        server._sessions.pop(sid, None)
+
+
+def test_config_set_rejects_running_session_removed_before_deferred_queue(monkeypatch):
+    from hermes_cli import model_switch as model_switch_mod
+
+    sid = "vanished-before-deferred-switch"
+    session = _session(agent=types.SimpleNamespace(), running=True)
+    server._sessions[sid] = session
+    parse_entered = threading.Event()
+    close_done = threading.Event()
+    original_parse = model_switch_mod.parse_model_switch_args
+
+    def delayed_parse(raw):
+        parse_entered.set()
+        assert close_done.wait(5)
+        return original_parse(raw)
+
+    monkeypatch.setattr(model_switch_mod, "parse_model_switch_args", delayed_parse)
+
+    def remove_session():
+        assert parse_entered.wait(5)
+        assert server._pop_session_by_id(sid) is session
+        close_done.set()
+
+    closer = threading.Thread(target=remove_session)
+    closer.start()
+    try:
+        resp = server.handle_request(
+            {
+                "id": "raced-deferred-switch",
+                "method": "config.set",
+                "params": {
+                    "session_id": sid,
+                    "key": "model",
+                    "value": "gpt-5.6-sol --provider openai-codex --session",
+                },
+            }
+        )
+        closer.join(5)
+
+        assert resp is not None
+        assert resp["error"]["code"] == 4001
+        assert resp["error"]["message"] == "session not found"
+        assert "pending_model_switch" not in session
+    finally:
+        close_done.set()
+        closer.join(5)
+        server._sessions.pop(sid, None)
+
+
+def test_model_switch_lifecycle_claim_blocks_session_teardown(monkeypatch):
+    sid = "switch-before-close"
+    session = _session(agent=types.SimpleNamespace())
+    server._sessions[sid] = session
+    switch_entered = threading.Event()
+    release_switch = threading.Event()
+    close_done = threading.Event()
+    response = {}
+    popped = {}
+
+    def blocked_apply(*_args, **_kwargs):
+        switch_entered.set()
+        assert release_switch.wait(5)
+        return {
+            "value": "gpt-5.6-sol",
+            "warning": "",
+            "confirm_required": False,
+            "scope": "session",
+        }
+
+    monkeypatch.setattr(server, "_apply_model_switch_unlocked", blocked_apply)
+
+    def switch_model():
+        response["value"] = server.handle_request(
+            {
+                "id": "claimed-session-switch",
+                "method": "config.set",
+                "params": {
+                    "session_id": sid,
+                    "key": "model",
+                    "value": "gpt-5.6-sol --provider openai-codex --session",
+                },
+            }
+        )
+
+    def close_session():
+        popped["value"] = server._pop_session_by_id(sid)
+        close_done.set()
+
+    switcher = threading.Thread(target=switch_model)
+    closer = threading.Thread(target=close_session)
+    switcher.start()
+    assert switch_entered.wait(5)
+    closer.start()
+    time.sleep(0.1)
+    try:
+        assert not close_done.is_set()
+        assert server._sessions.get(sid) is session
+    finally:
+        release_switch.set()
+        switcher.join(5)
+        closer.join(5)
+        server._sessions.pop(sid, None)
+
+    assert response["value"]["result"]["scope"] == "session"
+    assert close_done.is_set()
+    assert popped["value"] is session
 
 
 def test_config_set_fast_rejects_unsupported_model(monkeypatch):
@@ -12547,14 +12749,14 @@ def test_session_active_list_reports_live_sessions(monkeypatch):
     server._sessions.clear()
     monkeypatch.setattr(server, "_get_db", lambda: _DB())
     server._sessions["sid-a"] = _session(
-        agent=types.SimpleNamespace(model="model-a"),
+        agent=types.SimpleNamespace(model="model-a", provider="openai-codex"),
         history=[{"role": "user", "content": "find docs"}],
         session_key="key-a",
         created_at=10.0,
         last_active=20.0,
     )
     server._sessions["sid-b"] = _session(
-        agent=types.SimpleNamespace(model="model-b"),
+        agent=types.SimpleNamespace(model="model-b", provider="nous"),
         history=[{"role": "assistant", "content": "writing code"}],
         running=True,
         session_key="key-b",
@@ -12583,6 +12785,7 @@ def test_session_active_list_reports_live_sessions(monkeypatch):
         "last_active": 20.0,
         "message_count": 1,
         "model": "model-a",
+        "provider": "openai-codex",
         "preview": "find docs",
         "session_key": "key-a",
         "started_at": 10.0,
@@ -12590,6 +12793,7 @@ def test_session_active_list_reports_live_sessions(monkeypatch):
         "title": "Research",
     }
     assert rows["sid-b"]["current"] is True
+    assert rows["sid-b"]["provider"] == "nous"
     assert rows["sid-b"]["status"] == "working"
     assert rows["sid-b"]["title"] == "Implement"
     assert rows["sid-b"]["preview"] == "writing code"
@@ -12642,6 +12846,73 @@ def test_session_active_list_excludes_finalized_sessions(monkeypatch):
 
     session_rows = resp["result"]["sessions"]
     assert [row["id"] for row in session_rows] == ["sid-live"]
+
+
+def test_session_active_list_reports_foreign_db_rows(monkeypatch):
+    """Cross-process liveness (#live-indicators): sessions that exist only in
+    state.db (cron runs, CLI one-shots, messaging turns in other processes)
+    never enter ``_sessions``, so ``session.active_list`` must surface
+    recently-active rows flagged ``foreign`` for clients to paint from the
+    same poll. Rows outside the 300s recency window are not reported."""
+
+    class _DB:
+        def get_session_title(self, key):
+            return ""
+
+        def list_sessions_rich(self, **kwargs):
+            now = time.time()
+            return [
+                {
+                    "id": "cron_abc_20260812",
+                    "source": "cron",
+                    "model": "m",
+                    "title": "Nightly job",
+                    "started_at": now - 100,
+                    "last_active": now - 10,
+                    "last_activity_description": "executing tool",
+                    "message_count": 4,
+                    "ended_at": None,
+                },
+                {
+                    "id": "old_cli_session",
+                    "source": "cli",
+                    "model": "m",
+                    "title": "Stale",
+                    "started_at": now - 4000,
+                    "last_active": now - 4000,
+                    "last_activity_description": "",
+                    "message_count": 9,
+                    "ended_at": None,
+                },
+            ]
+
+    previous_sessions = dict(server._sessions)
+    previous_children = dict(server._active_child_runs)
+    server._sessions.clear()
+    server._active_child_runs.clear()
+    monkeypatch.setattr(server, "_get_db", lambda: _DB())
+    try:
+        resp = server.handle_request(
+            {
+                "id": "1",
+                "method": "session.active_list",
+                "params": {},
+            }
+        )
+    finally:
+        server._sessions.clear()
+        server._sessions.update(previous_sessions)
+        server._active_child_runs.clear()
+        server._active_child_runs.update(previous_children)
+
+    rows = {row["id"]: row for row in resp["result"]["sessions"]}
+    foreign = rows["cron_abc_20260812"]
+    assert foreign["foreign"] is True
+    assert foreign["status"] == "working"
+    assert foreign["session_key"] == "cron_abc_20260812"
+    assert foreign["description"] == "executing tool"
+    # A row outside the 300s recency window is NOT reported.
+    assert "old_cli_session" not in rows
 
 
 
