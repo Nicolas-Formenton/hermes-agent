@@ -24,6 +24,7 @@ import { $sidebarRowMeta } from '@/store/layout'
 import { normalizeProfileKey } from '@/store/profile'
 import { $pullRequestsByBranch, sessionPrKey } from '@/store/pull-requests'
 import { $sessionDotStateById, hasLiveTurn, showsRunningArc } from '@/store/session-dot-state'
+import { $workingSessionIds } from '@/store/session-states'
 import { sessionCostUsd } from '@/store/sidebar-archive'
 
 import { SessionStatusDot } from '../session-status-dot'
@@ -45,10 +46,14 @@ interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
   branchStem?: string
   isPinned: boolean
   isSelected: boolean
+  /** Backend-derived read state — same value the dot paints. */
+  unread: boolean
   onArchive: () => void
   onBranch?: () => void
   onDelete: () => void
   onPin: () => void
+  /** Toggle the persisted read-state watermark. */
+  onToggleUnread: () => void
   onResume: () => void
   reorderable?: boolean
   dragging?: boolean
@@ -80,10 +85,12 @@ function SidebarSessionRowImpl({
   branchStem,
   isPinned,
   isSelected,
+  unread,
   onArchive,
   onBranch,
   onDelete,
   onPin,
+  onToggleUnread,
   onResume,
   reorderable = false,
   dragging = false,
@@ -176,6 +183,14 @@ function SidebarSessionRowImpl({
   // whenever any session's status changes, but a row only repaints on its own.
   const dotState = useStoreSelector($sessionDotStateById, states => states[session.id] ?? 'idle')
   const liveTurn = hasLiveTurn(dotState)
+  // Live activity caption for FOREIGN sessions (DB-derived liveness): rows
+  // whose work streams through events own their own transcript, so the caption
+  // only paints when no event-owned runtime is driving this row.
+  const eventWorking = useStoreSelector($workingSessionIds, ids => ids.includes(session.id))
+  const activityCaption =
+    dotState === 'working' && !eventWorking && session.last_activity_description
+      ? session.last_activity_description
+      : null
 
   // An archived session has no live status to paint, so the archive glyph takes
   // the lead slot the dot would occupy instead of adding a column of its own.
@@ -191,7 +206,9 @@ function SidebarSessionRowImpl({
       onBranch={onBranch}
       onDelete={onDelete}
       onPin={onPin}
+      onToggleUnread={onToggleUnread}
       pinned={isPinned}
+      unread={unread}
       profile={session.profile}
       sessionId={session.id}
       title={title}
@@ -220,7 +237,9 @@ function SidebarSessionRowImpl({
               onBranch={onBranch}
               onDelete={onDelete}
               onPin={onPin}
+              onToggleUnread={onToggleUnread}
               pinned={isPinned}
+              unread={unread}
               profile={session.profile}
               sessionId={session.id}
               title={title}
@@ -353,9 +372,16 @@ function SidebarSessionRowImpl({
               />
             </Tip>
           ) : null}
-          <SidebarRowLabel className="flex-1 font-normal group-hover:text-foreground group-data-[working=true]:text-foreground/90">
-            {title}
-          </SidebarRowLabel>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <SidebarRowLabel className="font-normal group-hover:text-foreground group-data-[working=true]:text-foreground/90">
+              {title}
+            </SidebarRowLabel>
+            {activityCaption ? (
+              <span className="truncate text-[0.625rem] leading-tight text-(--ui-text-tertiary)">
+                {activityCaption}
+              </span>
+            ) : null}
+          </div>
         </SidebarRowBody>
       </SidebarRowShell>
     </SessionContextMenu>
@@ -379,6 +405,7 @@ function rowPropsEqual(a: SidebarSessionRowProps, b: SidebarSessionRowProps): bo
     a.session === b.session &&
     a.isPinned === b.isPinned &&
     a.isSelected === b.isSelected &&
+    a.unread === b.unread &&
     a.branchStem === b.branchStem &&
     a.reorderable === b.reorderable &&
     a.dragging === b.dragging &&

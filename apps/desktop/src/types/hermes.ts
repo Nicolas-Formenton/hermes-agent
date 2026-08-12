@@ -489,6 +489,13 @@ export interface SessionInfo {
   estimated_cost_usd?: null | number
   is_active: boolean
   last_active: number
+  /** Durable mid-turn activity stamp from the backend (agent heartbeat) —
+   *  populated for sessions whose events this renderer never hears (cli
+   *  one-shots, cron runs, other processes), so the row can caption what
+   *  the foreign agent is doing. */
+  last_activity_at?: number
+  last_activity_description?: string
+  last_activity_provenance?: string
   message_count: number
   model: null | string
   output_tokens: number
@@ -501,6 +508,11 @@ export interface SessionInfo {
    *  elsewhere. Undefined against a backend predating the flag; treat that as
    *  "no opinion" and leave the local pin set alone. */
   pinned?: boolean
+  /** Derived read state (backend watermark: `last_read_at` vs `last_active`,
+   *  see `SessionDB.session_unread`). True when the conversation was
+   *  explicitly marked unread or a response arrived after it was last read.
+   *  Undefined against a backend predating the flag; treat as read. */
+  unread?: boolean
   preview: null | string
   source: null | string
   started_at: number
