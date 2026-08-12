@@ -912,7 +912,10 @@ def _(rid, params: dict) -> dict:
 
     Unlike ``session.list`` this is not a historical DB browser: it reports only
     sessions with in-memory agents/workers that the current TUI can switch to
-    without closing siblings.
+    without closing siblings. It ALSO reports ``foreign`` rows — recently-active
+    sessions that exist only in state.db (cron runs, CLI one-shots, messaging
+    turns written by other processes, subagent children with a run in flight)
+    — so clients can paint cross-process liveness from the same poll.
     """
     current = str(params.get("current_session_id") or "")
     try:
