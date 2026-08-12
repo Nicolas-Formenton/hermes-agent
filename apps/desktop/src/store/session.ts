@@ -641,7 +641,9 @@ export const setActiveSessionStoredIdRotation = (next: Updater<ActiveSessionStor
   updateAtom($activeSessionStoredIdRotation, next)
 
 // Transient: a background session finished and the user hasn't opened it since.
-// Written by session-states.ts (handleTransition), cleared here on session open.
+// Runtime half of the unread dot — the PERSISTED half (explicit Mark as
+// unread, survives restarts) lives in session-unread.ts + the backend
+// watermark (SessionDB.set_session_read).
 export const $unreadFinishedSessionIds = atom<string[]>([])
 
 export const markAllSessionsRead = () => {
