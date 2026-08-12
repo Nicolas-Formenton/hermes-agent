@@ -4527,5 +4527,7 @@ class TestSessionPatchUnread:
         assert resp.status_code == 200
 
     def test_patch_unread_rejects_non_bool(self):
-        resp = self.auth_client.patch("/api/sessions/s1", json={"unread": "yes"})
+        # NB: pydantic v2 coerces "yes"/"no"/"1"/"0"/"on"/"off" to bool, so use
+        # a string outside the accepted set to prove validation rejects it.
+        resp = self.auth_client.patch("/api/sessions/s1", json={"unread": "maybe"})
         assert resp.status_code == 422  # pydantic validation
