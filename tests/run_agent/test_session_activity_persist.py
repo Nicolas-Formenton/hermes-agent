@@ -318,3 +318,15 @@ def test_compression_transition_provenances_surface_in_activity_summary(monkeypa
         assert summary["provenance"] == provenance.value
         assert summary["last_activity_description"] == desc
         assert summary["last_activity_desc"] == desc
+
+
+def test_normalize_source_provenance_values():
+    """Creator-surface provenance values resolve; garbage falls back to UNKNOWN."""
+    from agent.session_activity import normalize_activity_provenance
+
+    assert normalize_activity_provenance("cron") == ActivityProvenance("cron")
+    assert normalize_activity_provenance("cli") == ActivityProvenance("cli")
+    assert normalize_activity_provenance("subagent") == ActivityProvenance("subagent")
+    assert normalize_activity_provenance("gateway") == ActivityProvenance("gateway")
+    assert normalize_activity_provenance("acp") == ActivityProvenance("acp")
+    assert normalize_activity_provenance("garbage-value") == ActivityProvenance.UNKNOWN

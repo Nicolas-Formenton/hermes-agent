@@ -37,6 +37,13 @@ class ActivityProvenance(str, Enum):
     AGENT_COMPRESSION = "agent.compression"
     AGENT_COMPRESSION_TIMEOUT = "agent.compression_timeout"
     AGENT_COMPRESSION_COOLDOWN = "agent.compression_cooldown"
+    # Creator surfaces — lets consumers distinguish user-started sessions from
+    # agent/automated ones using only the DB row (#live-indicators).
+    SOURCE_CLI = "cli"
+    SOURCE_CRON = "cron"
+    SOURCE_SUBAGENT = "subagent"
+    SOURCE_GATEWAY = "gateway"
+    SOURCE_ACP = "acp"
 
 
 def bound_activity_description(description: Optional[str]) -> str:
