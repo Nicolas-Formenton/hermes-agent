@@ -43,7 +43,6 @@ import { $autoSpeakReplies } from '@/store/voice-prefs'
 import { useTheme } from '@/themes'
 
 import { AttachmentList } from './attachments'
-import { FollowUpCard } from './follow-up/card'
 import {
   acceptsTriggerCompletion,
   COMPOSER_FADE_BACKGROUND,
@@ -59,6 +58,7 @@ import { ComposerControls } from './controls'
 import { ComposerDirectiveActions } from './directive-actions'
 import { COMPOSER_DROP_ACTIVE_CLASS, COMPOSER_DROP_FADE_CLASS } from './drop-affordance'
 import { markActiveComposer, onComposerAttachImagesRequest } from './focus'
+import { FollowUpCard } from './follow-up/card'
 import { HelpHint } from './help-hint'
 import { useAtCompletions } from './hooks/use-at-completions'
 import { useComposerBranch } from './hooks/use-composer-branch'
