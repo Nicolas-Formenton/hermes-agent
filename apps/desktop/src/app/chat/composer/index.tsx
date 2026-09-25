@@ -43,6 +43,7 @@ import { $autoSpeakReplies } from '@/store/voice-prefs'
 import { useTheme } from '@/themes'
 
 import { AttachmentList } from './attachments'
+import { FollowUpCard } from './follow-up/card'
 import {
   acceptsTriggerCompletion,
   COMPOSER_FADE_BACKGROUND,
@@ -1523,6 +1524,10 @@ export function ChatBar({
                     </div>
                   )}
                   {attachments.length > 0 && <AttachmentList attachments={attachments} onRemove={onRemoveAttachment} />}
+                  {/* The pending transcript follow-up sits with the attachment
+                      chips — both are "what the next send carries" — and above
+                      the input so the quote reads before the answer to it. */}
+                  <FollowUpCard />
                   <div
                     className={cn(
                       'grid w-full',
