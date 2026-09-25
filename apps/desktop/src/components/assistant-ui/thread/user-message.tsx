@@ -13,7 +13,7 @@ import { BackgroundResult } from '@/components/assistant-ui/thread/system-messag
 import { MessageTimelineTimestamp } from '@/components/assistant-ui/thread/timeline-timestamp'
 import { type RestoreMessageTarget } from '@/components/assistant-ui/thread/types'
 import { useMessageReactions } from '@/components/assistant-ui/thread/use-message-reactions'
-import { UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
+import { QuotedPassage, splitLeadingQuote, UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
@@ -249,6 +249,9 @@ export const UserMessage: FC<{
   const messageId = useAuiState(s => s.message.id)
   const content = useAuiState(s => s.message.content)
   const messageText = messageContentText(content)
+  // A follow-up's quoted passage is the message's header, not part of the body
+  // the clamp measures: a reply has to show what it answers AND what it says.
+  const { body: bubbleBody, lines: quotedLines } = splitLeadingQuote(messageText)
   const threadRunning = useAuiState(s => s.thread.isRunning)
 
   const latestUserId = useAuiState(s => {
@@ -395,17 +398,23 @@ export const UserMessage: FC<{
     // Render the user's text through a minimal markdown pipeline:
     // backtick `code` and ``` fenced ``` blocks, with directive chips
     // (`@file:` etc.) still resolved inside the plain-text spans.
-    <div
-      className={cn(clampActive && 'sticky-human-clamp')}
-      data-clamped={clampActive && bodyClamped ? 'true' : undefined}
-    >
-      {/* Match the edit composer's collapsed line box (min-h-[1.25rem]) so
-          clicking to edit can't grow the bubble by a sub-pixel and reflow the
-          turn 1px. */}
-      <div className="min-h-[1.25rem]" ref={clampInnerRef}>
-        <UserMessageText className="wrap-anywhere" text={messageText} />
+    <>
+      {/* The quoted passage sits OUTSIDE the clamp below: it is what the reply
+          answers, so it has to be readable whole, while the clamp exists to
+          shorten what the reader themselves wrote. */}
+      {quotedLines && <QuotedPassage lines={quotedLines} />}
+      <div
+        className={cn(clampActive && 'sticky-human-clamp')}
+        data-clamped={clampActive && bodyClamped ? 'true' : undefined}
+      >
+        {/* Match the edit composer's collapsed line box (min-h-[1.25rem]) so
+            clicking to edit can't grow the bubble by a sub-pixel and reflow the
+            turn 1px. */}
+        <div className="min-h-[1.25rem]" ref={clampInnerRef}>
+          <UserMessageText className="wrap-anywhere" text={bubbleBody} />
+        </div>
       </div>
-    </div>
+    </>
   ) : (
     // A file-only turn (a bare large paste, a dropped file) has no prose, so
     // its chips ARE the prompt: they fill the bubble rather than leaving it
