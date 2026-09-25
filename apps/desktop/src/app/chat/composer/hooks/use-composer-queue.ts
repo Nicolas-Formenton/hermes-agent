@@ -190,6 +190,7 @@ export function useComposerQueue({
         followUp,
         text
       })
+
       triggerHaptic(saved ? 'success' : 'selection')
     } else {
       triggerHaptic('cancel')

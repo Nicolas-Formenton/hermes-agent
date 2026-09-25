@@ -1722,6 +1722,7 @@ describe('usePromptActions slash.exec dispatch payloads', () => {
       parts?: { text?: string }[]
       role?: string
     }[]
+
     const optimistic = messages.find(message => message.role === 'user')
     const optimisticText = (optimistic?.parts ?? []).map(part => part.text ?? '').join('')
 
