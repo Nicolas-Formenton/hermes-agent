@@ -181,7 +181,10 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       // Same shape as the attachments above: a queue drain froze its passage
       // when the prompt was parked, so an explicit `followUp` (even null) wins
       // over whatever this composer holds right now.
-      const usingComposerFollowUp = options?.followUp === undefined
+      // Only the composer's own submit may read "no key" as "use the composer's
+      // card". A drained entry is the authority for its own passage, so a
+      // missing key there means no quote — never somebody else's session's.
+      const usingComposerFollowUp = options?.followUp === undefined && !options?.fromQueue
 
       // Drop undefined/null holes a session switch or draft restore can leave in
       // the attachments array (same bug class as AttachmentList #49624). Without

@@ -1313,6 +1313,10 @@ describe('usePromptActions slash.exec dispatch payloads', () => {
   afterEach(() => {
     cleanup()
     $busy.set(false)
+    // The follow-up cases below seed the main composer's card on purpose (and
+    // one asserts it SURVIVES a drain), so the slot is module state that has to
+    // be emptied between cases or the next send inherits this one's passage.
+    mainComposerFollowUpScope.clear()
     vi.restoreAllMocks()
   })
 
@@ -1837,6 +1841,55 @@ describe('usePromptActions slash.exec dispatch payloads', () => {
 
     // A passage rides ONE send: the card above the composer is its receipt.
     expect(mainComposerFollowUpScope.$followUp.get()).toBeNull()
+  })
+
+  it('drains an entry with its own passage, never the composer it is not showing', async () => {
+    // The offscreen drain runs while another session is on screen. Reading the
+    // composer there would send that session's quote into this one, so the
+    // entry's own passage is the only answer — and the on-screen card is left
+    // alone for the send it actually belongs to.
+    const requestGateway = vi.fn(async () => ({}) as never)
+
+    let handle: HarnessHandle | null = null
+    await actRender(
+      <Harness onReady={h => (handle = h)} refreshSessions={async () => undefined} requestGateway={requestGateway} />
+    )
+
+    mainComposerFollowUpScope.set({ passage: 'the answer on screen', source: 'assistant' })
+
+    await handle!.submitText('reply from another session', {
+      followUp: { passage: 'the parked answer', source: 'assistant' },
+      fromQueue: true
+    })
+
+    expect(requestGateway).toHaveBeenCalledWith(
+      'prompt.submit',
+      expect.objectContaining({ text: '> the parked answer\n\nreply from another session' }),
+      1_800_000
+    )
+    expect(mainComposerFollowUpScope.$followUp.get()?.passage).toBe('the answer on screen')
+  })
+
+  it('never reads the composer for a drained entry that carries no passage', async () => {
+    // A drain that lost its key must degrade to "no quote", not to whatever
+    // card the window happens to be showing.
+    const requestGateway = vi.fn(async () => ({}) as never)
+
+    let handle: HarnessHandle | null = null
+    await actRender(
+      <Harness onReady={h => (handle = h)} refreshSessions={async () => undefined} requestGateway={requestGateway} />
+    )
+
+    mainComposerFollowUpScope.set({ passage: 'the answer on screen', source: 'assistant' })
+
+    await handle!.submitText('reply from another session', { fromQueue: true })
+
+    expect(requestGateway).toHaveBeenCalledWith(
+      'prompt.submit',
+      expect.objectContaining({ text: 'reply from another session' }),
+      1_800_000
+    )
+    expect(mainComposerFollowUpScope.$followUp.get()?.passage).toBe('the answer on screen')
   })
 
   it('renders a skill turn as its invocation — the expanded body never reaches a bubble', async () => {

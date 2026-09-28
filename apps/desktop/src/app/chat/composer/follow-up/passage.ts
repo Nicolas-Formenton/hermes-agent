@@ -15,9 +15,14 @@ import { normalizeFollowUpPassage } from '@/store/composer'
  */
 const NOT_A_PASSAGE = '[contenteditable="true"], a, button, input, select, textarea'
 
-/** Both bubble flavours carry their side as `data-role`; the transcript's own
- *  chrome (timeline rows, day markers, notices) carries neither. */
-const MESSAGE_ROOT = '[data-role="assistant"], [data-role="user"]'
+/**
+ * The message roots a passage may come from: the bubbles' own declared slot
+ * ids, not the `data-role` values they happen to carry. The slot is the
+ * attribute the emitting component writes for itself, so the contract lives
+ * with the emitters (`data-slot="aui_*_message-root"`, greppable in one search)
+ * instead of in a second copy of their role vocabulary.
+ */
+const MESSAGE_ROOT = '[data-slot="aui_assistant-message-root"], [data-slot="aui_user-message-root"]'
 
 export interface FollowUpCapture {
   /** The passage as it will be sent — normalized once, here. */
@@ -68,5 +73,7 @@ export function captureFollowUpSelection(
 
   const passage = normalizeFollowUpPassage(selection.toString())
 
-  return passage ? { passage, source: anchorRoot.dataset.role === 'user' ? 'user' : 'assistant' } : null
+  return passage
+    ? { passage, source: anchorRoot.dataset.slot === 'aui_user-message-root' ? 'user' : 'assistant' }
+    : null
 }

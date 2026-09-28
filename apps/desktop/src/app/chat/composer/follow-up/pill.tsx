@@ -178,7 +178,11 @@ export function FollowUpPill({ viewportRef }: FollowUpPillProps) {
   // moving focus there.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!isComposerChord(event)) {
+      // The same two gates the chord's own ladder yields on: an event another
+      // handler already claimed, and an IME mid-composition (whose preedit
+      // keydowns carry Ctrl+L for candidate control — `comboFromEvent` bails on
+      // the same signal for the same reason).
+      if (event.defaultPrevented || event.isComposing || !isComposerChord(event)) {
         return
       }
 

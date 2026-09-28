@@ -107,4 +107,16 @@ describe('captureFollowUpSelection', () => {
 
     expect(captureFollowUpSelection(window.getSelection(), viewport)?.passage).toBe('line one\n\nline two')
   })
+
+  it('keys the rule on the bubbles declared slot, not on a role attribute', () => {
+    // The slot is what the emitting component writes for itself; a role-only
+    // node is not a bubble, however message-like it looks.
+    const impostor = document.createElement('div')
+    impostor.setAttribute('data-role', 'assistant')
+    impostor.textContent = 'chrome that merely calls itself a message'
+    viewport.append(impostor)
+    selectContents(impostor)
+
+    expect(captureFollowUpSelection(window.getSelection(), viewport)).toBeNull()
+  })
 })

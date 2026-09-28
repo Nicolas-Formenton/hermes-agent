@@ -551,6 +551,11 @@ export const UserMessage: FC<{
                             event.stopPropagation()
                             triggerHaptic('selection')
                             onRequestRestoreConfirm?.(messageId, {
+                              // Deliberately the WHOLE message, quote included:
+                              // a rewind re-runs what was actually sent, and the
+                              // `>` block is part of that prompt. The bubble
+                              // renders it as a quote again (splitLeadingQuote),
+                              // so the re-run reads the same as the original.
                               text: messageText,
                               userOrdinal: runtimeUserOrdinal
                             })

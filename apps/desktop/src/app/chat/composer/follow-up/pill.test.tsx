@@ -133,6 +133,29 @@ describe('FollowUpPill', () => {
     expect(followUp.$followUp.get()).toEqual({ passage: 'the quoted answer', source: 'assistant' })
   })
 
+  it('yields the chord to an event another handler already claimed', () => {
+    mount()
+    selectBody()
+
+    // A user-rebound action on the same chord marks the event handled; the
+    // ladder this handler points at (`composer/focus-chord.ts`) yields on the
+    // same signal, so the pill must not steal it back.
+    const claimed = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ctrlKey: true, key: 'l' })
+    claimed.preventDefault()
+    window.dispatchEvent(claimed)
+
+    expect(followUp.$followUp.get()).toBeNull()
+  })
+
+  it('never fires mid-composition, where Ctrl+L belongs to the IME', () => {
+    mount()
+    selectBody()
+
+    fireEvent.keyDown(window, { ctrlKey: true, isComposing: true, key: 'l' })
+
+    expect(followUp.$followUp.get()).toBeNull()
+  })
+
   it('stays hidden for a collapsed caret and for a selection outside the transcript', () => {
     mount()
 
